@@ -1,0 +1,81 @@
+import re
+import json
+import csv
+from collections import defaultdict
+import os
+
+# Define file paths
+log_file = "server_logs.txt"
+failed_logins_file = "failed_logins.json"
+threat_ips_file = "threat_ips.json"
+combined_data_file = "combined_security_data.json"
+log_analysis_txt = "log_analysis.txt"
+log_analysis_csv = "log_analysis.csv"
+
+# Check current working directory and log file existence
+print(f"Current working directory: {os.getcwd()}")
+if not os.path.exists(log_file):
+    print(f"File not found: {log_file}")
+    exit(1)
+
+# Regex patterns
+log_pattern = r"(?P<ip>\d+\.\d+\.\d+\.\d+) - - \[(?P<date>.*?)\] \"(?P<method>\w+)"
+failed_login_pattern = r"(401|403)"
+
+# Data structures
+failed_attempts = defaultdict(int)
+log_entries = []
+threat_intel_ips = ["192.168.1.100", "203.0.113.42"]  # Example threat IPs
+
+# Extract data from log file
+with open(log_file, "r") as file:
+    for line in file:
+        match = re.search(log_pattern, line)
+        if match:
+            ip = match.group("ip")
+            date = match.group("date")
+            method = match.group("method")
+            log_entries.append((ip, date, method))
+
+            # Check for failed login attempts
+            if re.search(failed_login_pattern, line):
+                failed_attempts[ip] += 1
+
+# Write failed logins to JSON
+failed_logins = {ip: count for ip, count in failed_attempts.items() if count > 5}
+with open(failed_logins_file, "w") as json_file:
+    json.dump(failed_logins, json_file, indent=4)
+
+# Write threat IPs to JSON
+threat_logs = {ip: count for ip, count in failed_attempts.items() if ip in threat_intel_ips}
+with open(threat_ips_file, "w") as json_file:
+    json.dump(threat_logs, json_file, indent=4)
+
+# Combine security data and write to JSON
+combined_data = {
+    "failed_logins": failed_logins,
+    "threat_ips": threat_logs
+}
+with open(combined_data_file, "w") as json_file:
+    json.dump(combined_data, json_file, indent=4)
+
+# Write log analysis to TXT
+with open(log_analysis_txt, "w") as txt_file:
+    for ip, count in failed_attempts.items():
+        txt_file.write(f"{ip}: {count}\n")
+
+# Write log analysis to CSV
+with open(log_analysis_csv, "w", newline="") as csv_file:
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow(["IP Address", "Date", "HTTP Method", "Failed Attempts"])
+
+    for ip, date, method in log_entries:
+        attempts = failed_attempts.get(ip, 0)
+        csv_writer.writerow([ip, date, method, attempts])
+
+print("Log analysis completed. Files generated:")
+print(f"- {failed_logins_file}")
+print(f"- {threat_ips_file}")
+print(f"- {combined_data_file}")
+print(f"- {log_analysis_txt}")
+print(f"- {log_analysis_csv}")
